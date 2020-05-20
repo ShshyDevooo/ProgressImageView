@@ -1,10 +1,16 @@
 package com.shshy.progressimageview
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.*
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
+import android.util.Log
 import android.util.TypedValue
 import androidx.appcompat.widget.AppCompatImageView
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
  * @author  ShiShY
@@ -32,6 +38,8 @@ class ProgressImageView : AppCompatImageView {
     private val progressXfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
     private val radiusXfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
     private lateinit var coverPaint: Paint
+    private var shadowAni: ValueAnimator? = null
+    private lateinit var shadowPaint: Paint
 
     constructor(context: Context?) : super(context) {
         init(null)
@@ -73,6 +81,11 @@ class ProgressImageView : AppCompatImageView {
         progressPaint.strokeWidth = progressStrokeWidth
         progressPaint.style = Paint.Style.FILL
         progressPaint.color = coverColor
+
+        shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        shadowPaint.style = Paint.Style.FILL
+        shadowPaint.xfermode = progressXfermode
+        shadowPaint.color = coverColor
     }
 
     override fun onDraw(canvas: Canvas?) {
@@ -85,20 +98,24 @@ class ProgressImageView : AppCompatImageView {
             //画蒙板
             val layoutCount = canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
             canvas?.drawRect(viewRect, coverPaint)
+            //进度扇形
             val text = if (currentProgress < 10) "0$currentProgress%" else "$currentProgress%"
             progressPaint.xfermode = progressXfermode
             val progress = (currentProgress / 100f) * 360
             progressPaint.style = Paint.Style.FILL_AND_STROKE
             progressPaint.color = coverColor
-            canvas?.drawArc(getArcRect(), 270f, progress, true, progressPaint)
+            val arcRect = getArcRect()
+            canvas?.drawArc(arcRect, 270f, progress, true, progressPaint)
             progressPaint.xfermode = null
             canvas?.restoreToCount(layoutCount ?: 0)
+            //进度描边
             if (showProgressStroke) {
                 progressPaint.style = Paint.Style.STROKE
                 progressPaint.color = progressStrokeColor
                 progressPaint.strokeWidth = progressStrokeWidth
-                canvas?.drawArc(getArcRect(), (270f + progress) % 360, 360f - progress, false, progressPaint)
+                canvas?.drawArc(arcRect, (270f + progress) % 360, 360f - progress, false, progressPaint)
             }
+            //进度文字
             canvas?.drawText(text, width.toFloat() / 2, getCenterBaseLine(), textPaint)
             //如果有圆角或者是圆形图片
             if (radiusSaveCount != null && radiusSaveCount != -1) {
@@ -130,7 +147,20 @@ class ProgressImageView : AppCompatImageView {
                 clipPaint.xfermode = radiusXfermode
                 canvas?.drawPath(clipPath, clipPaint)
                 clipPaint.xfermode = null
+                if (shadowAni?.isRunning == true) {
+                    val shadowCount = canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
+                    canvas?.drawPath(clipPath, coverPaint)
+                    canvas?.drawCircle(width.toFloat() / 2, height.toFloat() / 2, shadowAni?.animatedValue as Float, shadowPaint)
+                    canvas?.restoreToCount(shadowCount ?: 0)
+                }
                 canvas?.restoreToCount(radiusSaveCount)
+            } else {
+                if (shadowAni?.isRunning == true) {
+                    val shadowCount = canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
+                    canvas?.drawRect(viewRect, coverPaint)
+                    canvas?.drawCircle(width.toFloat() / 2, height.toFloat() / 2, shadowAni?.animatedValue as Float, shadowPaint)
+                    canvas?.restoreToCount(shadowCount ?: 0)
+                }
             }
         }
     }
@@ -145,8 +175,14 @@ class ProgressImageView : AppCompatImageView {
     }
 
     private fun getArcRect(): RectF {
+        val arcRadius = getArcRadius()
+        return RectF(width / 2 - arcRadius, height / 2 - arcRadius, width / 2 + arcRadius, height / 2 + arcRadius)
+    }
+
+    //进度扇形半径
+    private fun getArcRadius(): Float {
         val textWidth = textPaint.measureText("100%")
-        return RectF(width / 2 - (textWidth / 2 + textCirclePadding), height / 2 - (textWidth / 2 + textCirclePadding), width / 2 + (textWidth / 2 + textCirclePadding), height / 2 + (textWidth / 2 + textCirclePadding))
+        return textWidth / 2 + textCirclePadding
     }
 
     private fun getCenterBaseLine(): Float {
@@ -156,11 +192,25 @@ class ProgressImageView : AppCompatImageView {
 
     fun setProgress(progress: Int) {
         currentProgress = progress
+        if (currentProgress >= 100) {
+            showProgress = false
+            dismissShadowAnimation()
+        }
         invalidate()
     }
 
     fun showProgress(show: Boolean) {
         this.showProgress = show
         invalidate()
+    }
+
+    private fun dismissShadowAnimation() {
+        Handler(Looper.getMainLooper()).post {
+            val maxRadius = sqrt((width.toDouble() / 2).pow(2.toDouble()) + (height.toDouble() / 2).pow(2.toDouble()))
+            shadowAni = ValueAnimator.ofFloat(getArcRadius(), maxRadius.toFloat())
+            shadowAni?.addUpdateListener { invalidate() }
+            shadowAni?.duration = 500
+            shadowAni?.start()
+        }
     }
 }
