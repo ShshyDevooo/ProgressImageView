@@ -11,7 +11,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         Timer().schedule(object : TimerTask() {
-            var i = 98
+            var i = 0
             override fun run() {
                 progress_iv.setProgress(if (i <= 100) i else 100)
                 if (i == 100)
