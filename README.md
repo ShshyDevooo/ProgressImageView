@@ -1,6 +1,6 @@
 # ProgressImageView
 ## 引用方法   
-```implementation 'com.github.shshy:progressimageviewlib:1.0.0```  
+```implementation 'com.github.shshy:progressimageviewlib:1.0.0'```  
 ## 使用方式  
 ![Aaron Swartz](https://github.com/ShshyDevooo/ProgressImageView/blob/master/images/usage.png)
 ```
