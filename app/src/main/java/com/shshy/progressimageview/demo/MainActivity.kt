@@ -10,7 +10,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        progress_iv.showProgress(true)
         Timer().schedule(object : TimerTask() {
             var i = 0
             override fun run() {

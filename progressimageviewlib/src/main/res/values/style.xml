@@ -7,8 +7,10 @@
         <attr name="piv_coverColor" format="color" />
         <attr name="piv_textColor" format="color" />
         <attr name="piv_circlePadding" format="dimension" />
-        <attr name="piv_circleStrokeWidth" format="dimension" />
+        <attr name="piv_progressStrokeWidth" format="dimension" />
         <attr name="piv_isCircle" format="boolean" />
         <attr name="piv_radius" format="dimension" />
+        <attr name="piv_showProgressStroke" format="boolean" />
+        <attr name="piv_progressStrokeColor" format="color" />
     </declare-styleable>
 </resources>

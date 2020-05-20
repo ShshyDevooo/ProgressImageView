@@ -4,15 +4,14 @@ import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
 import android.util.TypedValue
-import android.view.View
-import android.widget.ImageView
+import androidx.appcompat.widget.AppCompatImageView
 
 /**
  * @author  ShiShY
  * @Description:
  * @data  2020/5/19 11:34
  */
-class ProgressImageView : ImageView {
+class ProgressImageView : AppCompatImageView {
     private var showProgress: Boolean = false
     private var currentProgress: Int = 0
     private var coverColor: Int = Color.argb(127, 0, 0, 0)
@@ -20,15 +19,19 @@ class ProgressImageView : ImageView {
     private var textSize = 14f
     private var textColor = Color.WHITE
     private var textCirclePadding = 10f
-    private lateinit var circlePaint: Paint
-    private var circleStrokeWidth = 10f
-    private val progressXfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+    private lateinit var progressPaint: Paint
+    private var progressStrokeWidth = 10f
     private var isCircle = false
-    private var radius = 0f
+    private var rectRadius = 0f
+    private var circleRadius = 0f
+    private var showProgressStroke = true
+    private var progressStrokeColor = Color.WHITE
     private val clipPath = Path()
-    private val radiusXfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
     private val viewRect: RectF = RectF()
     private val clipPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val progressXfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+    private val radiusXfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+    private lateinit var coverPaint: Paint
 
     constructor(context: Context?) : super(context) {
         init(null)
@@ -50,9 +53,11 @@ class ProgressImageView : ImageView {
         coverColor = typeArray.getColor(R.styleable.ProgressImageView_piv_coverColor, coverColor)
         textColor = typeArray.getColor(R.styleable.ProgressImageView_piv_textColor, textColor)
         textCirclePadding = typeArray.getDimension(R.styleable.ProgressImageView_piv_circlePadding, textCirclePadding)
-        circleStrokeWidth = typeArray.getDimension(R.styleable.ProgressImageView_piv_circleStrokeWidth, circleStrokeWidth)
+        progressStrokeWidth = typeArray.getDimension(R.styleable.ProgressImageView_piv_progressStrokeWidth, progressStrokeWidth)
         isCircle = typeArray.getBoolean(R.styleable.ProgressImageView_piv_isCircle, isCircle)
-        radius = typeArray.getDimension(R.styleable.ProgressImageView_piv_radius, radius)
+        rectRadius = typeArray.getDimension(R.styleable.ProgressImageView_piv_radius, rectRadius)
+        showProgressStroke = typeArray.getBoolean(R.styleable.ProgressImageView_piv_showProgressStroke, showProgressStroke)
+        progressStrokeColor = typeArray.getColor(R.styleable.ProgressImageView_piv_progressStrokeColor, progressStrokeColor)
         typeArray.recycle()
 
         textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -61,40 +66,48 @@ class ProgressImageView : ImageView {
         textPaint.style = Paint.Style.FILL
         textPaint.textAlign = Paint.Align.CENTER
 
-        circlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        circlePaint.strokeWidth = circleStrokeWidth
-        circlePaint.style = Paint.Style.FILL_AND_STROKE
-        circlePaint.color = coverColor
+        coverPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        coverPaint.color = coverColor
 
-        clipPaint.color = Color.WHITE
-        circlePaint.style = Paint.Style.FILL
-        setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        progressPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        progressPaint.strokeWidth = progressStrokeWidth
+        progressPaint.style = Paint.Style.FILL
+        progressPaint.color = coverColor
     }
 
     override fun onDraw(canvas: Canvas?) {
         if (showProgress) {
-            val radiusSaveCount = if (radius != 0f || isCircle)
-                canvas?.saveLayer(viewRect, clipPaint, Canvas.ALL_SAVE_FLAG)
+            val radiusSaveCount = if (rectRadius != 0f || isCircle)
+                canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
             else
                 -1
             super.onDraw(canvas)
             //画蒙板
-            val layoutCount = canvas?.saveLayer(viewRect, circlePaint, Canvas.ALL_SAVE_FLAG)
-            canvas?.drawRect(viewRect, circlePaint)
+            val layoutCount = canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
+            canvas?.drawRect(viewRect, coverPaint)
             val text = if (currentProgress < 10) "0$currentProgress%" else "$currentProgress%"
-            circlePaint.xfermode = progressXfermode
+            progressPaint.xfermode = progressXfermode
             val progress = (currentProgress / 100f) * 360
-            canvas?.drawArc(getArcRect(), 270f, progress, true, circlePaint)
-            circlePaint.xfermode = null
+            progressPaint.style = Paint.Style.FILL_AND_STROKE
+            progressPaint.color = coverColor
+            canvas?.drawArc(getArcRect(), 270f, progress, true, progressPaint)
+            progressPaint.xfermode = null
             canvas?.restoreToCount(layoutCount ?: 0)
+            if (showProgressStroke) {
+                progressPaint.style = Paint.Style.STROKE
+                progressPaint.color = progressStrokeColor
+                progressPaint.strokeWidth = progressStrokeWidth
+                canvas?.drawArc(getArcRect(), (270f + progress) % 360, 360f - progress, false, progressPaint)
+            }
             canvas?.drawText(text, width.toFloat() / 2, getCenterBaseLine(), textPaint)
+            //如果有圆角或者是圆形图片
             if (radiusSaveCount != null && radiusSaveCount != -1) {
                 clipPath.reset()
+                clipPaint.reset()
                 if (isCircle) {
-                    val minDimension = width.coerceAtMost(height)
-                    clipPath.addCircle(width.toFloat() / 2, height.toFloat() / 2, minDimension.toFloat(), Path.Direction.CCW)
+                    clipPath.addCircle(width.toFloat() / 2, height.toFloat() / 2, circleRadius, Path.Direction.CCW)
                 } else {
-                    clipPath.addRoundRect(viewRect, radius, radius, Path.Direction.CCW)
+                    clipPath.addRoundRect(viewRect, rectRadius, rectRadius, Path.Direction.CCW)
                 }
                 clipPaint.xfermode = radiusXfermode
                 canvas?.drawPath(clipPath, clipPaint)
@@ -102,12 +115,32 @@ class ProgressImageView : ImageView {
                 canvas?.restoreToCount(radiusSaveCount)
             }
         } else {
+            val radiusSaveCount = if (rectRadius != 0f || isCircle)
+                canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
+            else
+                -1
             super.onDraw(canvas)
+            if (radiusSaveCount != null && radiusSaveCount != -1) {
+                clipPath.reset()
+                if (isCircle) {
+                    clipPath.addCircle(width.toFloat() / 2, height.toFloat() / 2, circleRadius, Path.Direction.CCW)
+                } else {
+                    clipPath.addRoundRect(viewRect, rectRadius, rectRadius, Path.Direction.CCW)
+                }
+                clipPaint.xfermode = radiusXfermode
+                canvas?.drawPath(clipPath, clipPaint)
+                clipPaint.xfermode = null
+                canvas?.restoreToCount(radiusSaveCount)
+            }
         }
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        viewRect.set(0f, 0f, width.toFloat(), height.toFloat())
+        if (isCircle) {
+            circleRadius = Math.min(width, height) / 2f
+            viewRect.set(width / 2f - circleRadius, height / 2f - circleRadius, width / 2f + circleRadius, height / 2f + circleRadius)
+        } else
+            viewRect.set(0f, 0f, width.toFloat(), height.toFloat())
         super.onSizeChanged(w, h, oldw, oldh)
     }
 
