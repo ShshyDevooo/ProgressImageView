@@ -40,6 +40,7 @@ class ProgressImageView : AppCompatImageView {
     private lateinit var coverPaint: Paint
     private var shadowAni: ValueAnimator? = null
     private lateinit var shadowPaint: Paint
+    private val viewPath: Path = Path()
 
     constructor(context: Context?) : super(context) {
         init(null)
@@ -90,10 +91,7 @@ class ProgressImageView : AppCompatImageView {
 
     override fun onDraw(canvas: Canvas?) {
         if (showProgress) {
-            val radiusSaveCount = if (rectRadius != 0f || isCircle)
-                canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
-            else
-                -1
+            val radiusSaveCount = saveRadiusOrCircleLayer(canvas)
             super.onDraw(canvas)
             //画蒙板
             val layoutCount = canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
@@ -102,7 +100,7 @@ class ProgressImageView : AppCompatImageView {
             val text = if (currentProgress < 10) "0$currentProgress%" else "$currentProgress%"
             progressPaint.xfermode = progressXfermode
             val progress = (currentProgress / 100f) * 360
-            progressPaint.style = Paint.Style.FILL_AND_STROKE
+            progressPaint.style = Paint.Style.FILL
             progressPaint.color = coverColor
             val arcRect = getArcRect()
             canvas?.drawArc(arcRect, 270f, progress, true, progressPaint)
@@ -119,50 +117,55 @@ class ProgressImageView : AppCompatImageView {
             canvas?.drawText(text, width.toFloat() / 2, getCenterBaseLine(), textPaint)
             //如果有圆角或者是圆形图片
             if (radiusSaveCount != null && radiusSaveCount != -1) {
-                clipPath.reset()
-                clipPaint.reset()
-                if (isCircle) {
-                    clipPath.addCircle(width.toFloat() / 2, height.toFloat() / 2, circleRadius, Path.Direction.CCW)
-                } else {
-                    clipPath.addRoundRect(viewRect, rectRadius, rectRadius, Path.Direction.CCW)
-                }
-                clipPaint.xfermode = radiusXfermode
-                canvas?.drawPath(clipPath, clipPaint)
-                clipPaint.xfermode = null
+                clipImageRadiusOrCircle(radiusSaveCount, canvas)
                 canvas?.restoreToCount(radiusSaveCount)
             }
         } else {
-            val radiusSaveCount = if (rectRadius != 0f || isCircle)
-                canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
-            else
-                -1
+            val radiusSaveCount = saveRadiusOrCircleLayer(canvas)
             super.onDraw(canvas)
             if (radiusSaveCount != null && radiusSaveCount != -1) {
-                clipPath.reset()
-                if (isCircle) {
-                    clipPath.addCircle(width.toFloat() / 2, height.toFloat() / 2, circleRadius, Path.Direction.CCW)
-                } else {
-                    clipPath.addRoundRect(viewRect, rectRadius, rectRadius, Path.Direction.CCW)
-                }
-                clipPaint.xfermode = radiusXfermode
-                canvas?.drawPath(clipPath, clipPaint)
-                clipPaint.xfermode = null
-                if (shadowAni?.isRunning == true) {
-                    val shadowCount = canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
-                    canvas?.drawPath(clipPath, coverPaint)
-                    canvas?.drawCircle(width.toFloat() / 2, height.toFloat() / 2, shadowAni?.animatedValue as Float, shadowPaint)
-                    canvas?.restoreToCount(shadowCount ?: 0)
-                }
+                clipImageRadiusOrCircle(radiusSaveCount, canvas, true)
                 canvas?.restoreToCount(radiusSaveCount)
             } else {
                 if (shadowAni?.isRunning == true) {
-                    val shadowCount = canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
-                    canvas?.drawRect(viewRect, coverPaint)
-                    canvas?.drawCircle(width.toFloat() / 2, height.toFloat() / 2, shadowAni?.animatedValue as Float, shadowPaint)
-                    canvas?.restoreToCount(shadowCount ?: 0)
+                    drawShadowAnimate(viewPath, canvas)
                 }
             }
         }
+    }
+
+    private fun saveRadiusOrCircleLayer(canvas: Canvas?): Int? {
+        return if (rectRadius != 0f || isCircle)
+            canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
+        else
+            -1
+    }
+
+    //将此Image切成圆角或圆形,shouldAnimate是否需要显示蒙层消失动画
+    private fun clipImageRadiusOrCircle(saveCount: Int?, canvas: Canvas?, shouldAnimate: Boolean = false) {
+        if (saveCount != null && saveCount != -1) {
+            clipPath.reset()
+            clipPaint.reset()
+            if (isCircle) {
+                clipPath.addCircle(width.toFloat() / 2, height.toFloat() / 2, circleRadius, Path.Direction.CCW)
+            } else {
+                clipPath.addRoundRect(viewRect, rectRadius, rectRadius, Path.Direction.CCW)
+            }
+            clipPaint.xfermode = radiusXfermode
+            canvas?.drawPath(clipPath, clipPaint)
+            clipPaint.xfermode = null
+            if (shouldAnimate && shadowAni?.isRunning == true) {
+                drawShadowAnimate(clipPath, canvas)
+            }
+        }
+    }
+
+    //根据蒙层消失动画值画蒙层
+    private fun drawShadowAnimate(path: Path, canvas: Canvas?) {
+        val shadowCount = canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
+        canvas?.drawPath(path, coverPaint)
+        canvas?.drawCircle(width.toFloat() / 2, height.toFloat() / 2, shadowAni?.animatedValue as Float, shadowPaint)
+        canvas?.restoreToCount(shadowCount ?: 0)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -171,9 +174,12 @@ class ProgressImageView : AppCompatImageView {
             viewRect.set(width / 2f - circleRadius, height / 2f - circleRadius, width / 2f + circleRadius, height / 2f + circleRadius)
         } else
             viewRect.set(0f, 0f, width.toFloat(), height.toFloat())
+        viewPath.reset()
+        viewPath.addRect(viewRect, Path.Direction.CCW)
         super.onSizeChanged(w, h, oldw, oldh)
     }
 
+    //进度扇形矩形
     private fun getArcRect(): RectF {
         val arcRadius = getArcRadius()
         return RectF(width / 2 - arcRadius, height / 2 - arcRadius, width / 2 + arcRadius, height / 2 + arcRadius)
@@ -204,9 +210,15 @@ class ProgressImageView : AppCompatImageView {
         invalidate()
     }
 
+    fun getProgress(): Int {
+        return currentProgress
+    }
+
+    //蒙层消失动画
     private fun dismissShadowAnimation() {
         Handler(Looper.getMainLooper()).post {
-            val maxRadius = sqrt((width.toDouble() / 2).pow(2.toDouble()) + (height.toDouble() / 2).pow(2.toDouble()))
+            val maxRadius =
+                    sqrt((width.toDouble() / 2).pow(2.toDouble()) + (height.toDouble() / 2).pow(2.toDouble()))
             shadowAni = ValueAnimator.ofFloat(getArcRadius(), maxRadius.toFloat())
             shadowAni?.addUpdateListener { invalidate() }
             shadowAni?.duration = 500
