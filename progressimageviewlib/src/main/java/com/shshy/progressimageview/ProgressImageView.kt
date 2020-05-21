@@ -3,6 +3,7 @@ package com.shshy.progressimageview
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.*
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
@@ -36,11 +37,12 @@ class ProgressImageView : AppCompatImageView {
     private val viewRect: RectF = RectF()
     private val clipPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val progressXfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
-    private val radiusXfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+    private lateinit var radiusXfermode: PorterDuffXfermode
     private lateinit var coverPaint: Paint
     private var shadowAni: ValueAnimator? = null
     private lateinit var shadowPaint: Paint
     private val viewPath: Path = Path()
+    private val srcPath: Path = Path()
 
     constructor(context: Context?) : super(context) {
         init(null)
@@ -87,15 +89,32 @@ class ProgressImageView : AppCompatImageView {
         shadowPaint.style = Paint.Style.FILL
         shadowPaint.xfermode = progressXfermode
         shadowPaint.color = coverColor
+
+        radiusXfermode = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.O_MR1) {
+            PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+        } else {
+            PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
+        }
     }
 
     override fun onDraw(canvas: Canvas?) {
+        clipPath.reset()
+        val radiusSaveCount = saveRadiusOrCircleLayer(canvas)
+        if (radiusSaveCount != null && radiusSaveCount != -1) {
+            if (isCircle) {
+                clipPath.addCircle(width.toFloat() / 2, height.toFloat() / 2, circleRadius, Path.Direction.CCW)
+            } else {
+                clipPath.addRoundRect(viewRect, rectRadius, rectRadius, Path.Direction.CCW)
+            }
+        }
         if (showProgress) {
-            val radiusSaveCount = saveRadiusOrCircleLayer(canvas)
             super.onDraw(canvas)
             //画蒙板
             val layoutCount = canvas?.saveLayer(viewRect, null, Canvas.ALL_SAVE_FLAG)
-            canvas?.drawRect(viewRect, coverPaint)
+            if (radiusSaveCount != null && radiusSaveCount != -1)
+                canvas?.drawPath(clipPath, coverPaint)
+            else
+                canvas?.drawRect(viewRect, coverPaint)
             //进度扇形
             val text = if (currentProgress < 10) "0$currentProgress%" else "$currentProgress%"
             progressPaint.xfermode = progressXfermode
@@ -121,7 +140,6 @@ class ProgressImageView : AppCompatImageView {
                 canvas?.restoreToCount(radiusSaveCount)
             }
         } else {
-            val radiusSaveCount = saveRadiusOrCircleLayer(canvas)
             super.onDraw(canvas)
             if (radiusSaveCount != null && radiusSaveCount != -1) {
                 clipImageRadiusOrCircle(radiusSaveCount, canvas, true)
@@ -144,15 +162,16 @@ class ProgressImageView : AppCompatImageView {
     //将此Image切成圆角或圆形,shouldAnimate是否需要显示蒙层消失动画
     private fun clipImageRadiusOrCircle(saveCount: Int?, canvas: Canvas?, shouldAnimate: Boolean = false) {
         if (saveCount != null && saveCount != -1) {
-            clipPath.reset()
             clipPaint.reset()
-            if (isCircle) {
-                clipPath.addCircle(width.toFloat() / 2, height.toFloat() / 2, circleRadius, Path.Direction.CCW)
-            } else {
-                clipPath.addRoundRect(viewRect, rectRadius, rectRadius, Path.Direction.CCW)
-            }
             clipPaint.xfermode = radiusXfermode
-            canvas?.drawPath(clipPath, clipPaint)
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.O_MR1)
+                canvas?.drawPath(clipPath, clipPaint)
+            else {
+                srcPath.reset()
+                srcPath.addRect(viewRect, Path.Direction.CCW)
+                srcPath.op(clipPath, Path.Op.DIFFERENCE)
+                canvas?.drawPath(srcPath, clipPaint)
+            }
             clipPaint.xfermode = null
             if (shouldAnimate && shadowAni?.isRunning == true) {
                 drawShadowAnimate(clipPath, canvas)
@@ -202,12 +221,12 @@ class ProgressImageView : AppCompatImageView {
             showProgress = false
             dismissShadowAnimation()
         }
-        invalidate()
+        postInvalidate()
     }
 
     fun showProgress(show: Boolean) {
         this.showProgress = show
-        invalidate()
+        postInvalidate()
     }
 
     fun getProgress(): Int {
@@ -220,7 +239,7 @@ class ProgressImageView : AppCompatImageView {
             val maxRadius =
                     sqrt((width.toDouble() / 2).pow(2.toDouble()) + (height.toDouble() / 2).pow(2.toDouble()))
             shadowAni = ValueAnimator.ofFloat(getArcRadius(), maxRadius.toFloat())
-            shadowAni?.addUpdateListener { invalidate() }
+            shadowAni?.addUpdateListener { postInvalidate() }
             shadowAni?.duration = 500
             shadowAni?.start()
         }

@@ -17,7 +17,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:piv_circlePadding="20dp"
         app:piv_coverColor="#88000000"
-        app:piv_radius="15dp"
+        app:piv_isCircle="true"
         app:piv_textColor="#000"
         app:piv_textSize="14sp" />
 

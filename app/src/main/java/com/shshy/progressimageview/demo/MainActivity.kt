@@ -16,8 +16,8 @@ class MainActivity : AppCompatActivity() {
                 progress_iv.setProgress(if (i <= 100) i else 100)
                 if (i == 100)
                     cancel()
-                i++
+                i += 5
             }
-        }, 1000, 1000)
+        }, 1000, 500)
     }
 }
